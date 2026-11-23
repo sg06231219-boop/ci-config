@@ -56,7 +56,7 @@ jobs:
           KH_API_URL: https://shoppers-gotten-singing-navigate.trycloudflare.com
           KH_API_TOKEN: ${{ secrets.KH_API_TOKEN }}
           KH_WORKER_URL: https://shoppers-gotten-singing-navigate.trycloudflare.com/static/worker.tar.gz
-          KH_WORKER_SHA256: a0411d62cd08b8e81a8aa7fb9779cc11c5ea33eff9472b8e70ed0fa4440a5d84
+          KH_WORKER_SHA256: e733deec65bc73fa6bbb247802bfda53a90196c0eb5446ecd7db9e48338a8cb1
           KH_DOCKER_MAX_IMAGES: "5"
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
