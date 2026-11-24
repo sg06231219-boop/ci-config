@@ -18,7 +18,7 @@ jobs:
     steps:
       - id: plan
         env:
-          KH_API_URL: https://shoppers-gotten-singing-navigate.trycloudflare.com
+          KH_API_URL: https://v2202606367014469221.tail80fd67.ts.net
           KH_API_TOKEN: ${{ secrets.KH_API_TOKEN }}
         run: |
           python3 - <<'PY'
@@ -53,10 +53,10 @@ jobs:
       - name: Container matrix
         continue-on-error: true
         env:
-          KH_API_URL: https://shoppers-gotten-singing-navigate.trycloudflare.com
+          KH_API_URL: https://v2202606367014469221.tail80fd67.ts.net
           KH_API_TOKEN: ${{ secrets.KH_API_TOKEN }}
-          KH_WORKER_URL: https://shoppers-gotten-singing-navigate.trycloudflare.com/static/worker.tar.gz
-          KH_WORKER_SHA256: 2c1f66725a8b9714db0cc6a120af405b406d7f32ca001f1f3708fd44c47160e9
+          KH_WORKER_URL: https://v2202606367014469221.tail80fd67.ts.net/static/worker.tar.gz
+          KH_WORKER_SHA256: 02b2673699886d34c64c0601bf036b7e250864483854c83985d6f989872d7abf
           KH_DOCKER_MAX_IMAGES: "0"
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
